@@ -94,6 +94,12 @@ func (t *testRunner) executeTest(test string) {
 }
 
 func (t *testRunner) proccessOutput(out io.Reader) {
+	colorMap := map[byte]string{
+		'.': "\033[32m%s\033[0m",
+		'-': "\033[36m%s\033[0m",
+		'F': "\033[31m%s\033[0m",
+		'U': "\033[33m%s\033[0m",
+	}
 	reader := bufio.NewReader(out)
 	for {
 		c, err := reader.ReadByte()
@@ -159,38 +165,11 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 				}
 			}
 			break
-		case c == '.':
+		case c == '.' || c == '-' || c == 'F' || c == 'U':
 			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
 				fmt.Printf(" %d\n", t.stepsInLine)
 			}
-			fmt.Printf("\033[32m%s\033[0m", string(c))
-			t.Lock()
-			t.stepsInLine += 1
-			t.Unlock()
-			break
-		case c == 'F':
-			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
-				fmt.Printf(" %d\n", t.stepsInLine)
-			}
-			fmt.Printf("\033[31m%s\033[0m", string(c))
-			t.Lock()
-			t.stepsInLine += 1
-			t.Unlock()
-			break
-		case c == '-':
-			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
-				fmt.Printf(" %d\n", t.stepsInLine)
-			}
-			fmt.Printf("\033[36m%s\033[0m", string(c))
-			t.Lock()
-			t.stepsInLine += 1
-			t.Unlock()
-			break
-		case c == 'U':
-			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
-				fmt.Printf(" %d\n", t.stepsInLine)
-			}
-			fmt.Printf("\033[33m%s\033[0m", string(c))
+			fmt.Printf(colorMap[c], string(c))
 			t.Lock()
 			t.stepsInLine += 1
 			t.Unlock()
