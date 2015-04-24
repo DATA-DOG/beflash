@@ -129,44 +129,24 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 					// TODO:
 					// parse scenarios and steps info and store somewhere.
 					// parse failed, skipped and undefined scenarios/steps
-					scenariosRe := regexp.MustCompile("([0-9]+) scenario")
-					match := scenariosRe.FindString(string(line))
-					if match != "" {
-						scenarios := strings.Split(match, " ")
+					if n, matched := parseSuiteInfo("scenario", line); matched {
 						t.Lock()
-						i, _ := strconv.Atoi(scenarios[0])
-						t.scenarios += i
+						t.scenarios += n
 						t.Unlock()
-
-						//scenarios passed
-						scenariosPassedRe := regexp.MustCompile("([0-9]+) passed")
-						match = scenariosPassedRe.FindString(string(line))
-						if match != "" {
-							passed := strings.Split(match, " ")
+						if n, matched = parseSuiteInfo("passed", line); matched {
 							t.Lock()
-							i, _ := strconv.Atoi(passed[0])
-							t.scenariosPassed += i
+							t.scenariosPassed += n
 							t.Unlock()
 						}
 					}
 
-					stepsRe := regexp.MustCompile("([0-9]+) step")
-					match = stepsRe.FindString(string(line))
-					if match != "" {
-						steps := strings.Split(match, " ")
+					if n, matched := parseSuiteInfo("step", line); matched {
 						t.Lock()
-						i, _ := strconv.Atoi(steps[0])
-						t.steps += i
+						t.steps += n
 						t.Unlock()
-
-						//steps passed
-						stepsPassedRe := regexp.MustCompile("([0-9]+) passed")
-						match = stepsPassedRe.FindString(string(line))
-						if match != "" {
-							passed := strings.Split(match, " ")
+						if n, matched = parseSuiteInfo("passed", line); matched {
 							t.Lock()
-							i, _ := strconv.Atoi(passed[0])
-							t.stepsPassed += i
+							t.stepsPassed += n
 							t.Unlock()
 						}
 					}
@@ -187,8 +167,8 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 			break
 		}
 		if err != nil {
-			break
 			log.Printf("Unknown error while proccessing output: %s", err)
+			break
 		}
 	}
 }
@@ -205,6 +185,17 @@ func features() []string {
 		panic("failed to walk directory: " + err.Error())
 	}
 	return features
+}
+
+func parseSuiteInfo(s string, buf []byte) (n int, matched bool) {
+	re := regexp.MustCompile("([0-9]+) " + s)
+	match := re.FindString(string(buf))
+	if match != "" {
+		splitted := strings.Split(match, " ")
+		n, _ := strconv.Atoi(splitted[0])
+		return n, true
+	}
+	return 0, false
 }
 
 func green(s string) string {
