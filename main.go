@@ -50,8 +50,9 @@ func main() {
 	for _, e := range t.errors {
 		fmt.Println(e)
 	}
-	fmt.Printf("%d scenarios (\033[32m%d passed\033[0m)\n", t.scenarios, t.scenariosPassed)
-	fmt.Printf("%d steps (\033[32m%d passed\033[0m)\n", t.steps, t.stepsPassed)
+
+	fmt.Printf("%d scenarios (%s)\n", t.scenarios, green(fmt.Sprintf("%d passed", t.scenariosPassed)))
+	fmt.Printf("%d steps (%s)\n", t.steps, green(fmt.Sprintf("%d passed", t.stepsPassed)))
 	fmt.Printf("Tests ran in: %s\n", time.Since(start))
 }
 
@@ -101,11 +102,11 @@ func (t *testRunner) executeTest(test string) {
 }
 
 func (t *testRunner) proccessOutput(out io.Reader) {
-	colorMap := map[byte]string{
-		'.': "\033[32m%s\033[0m",
-		'-': "\033[36m%s\033[0m",
-		'F': "\033[31m%s\033[0m",
-		'U': "\033[33m%s\033[0m",
+	colorMap := map[byte]func(string) string{
+		'.': green,
+		'-': cyan,
+		'F': red,
+		'U': yellow,
 	}
 	reader := bufio.NewReader(out)
 	for {
@@ -176,7 +177,7 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
 				fmt.Printf(" %d\n", t.stepsInLine)
 			}
-			fmt.Printf(colorMap[c], string(c))
+			fmt.Print(colorMap[c](string(c)))
 			t.Lock()
 			t.stepsInLine += 1
 			t.Unlock()
@@ -204,4 +205,20 @@ func features() []string {
 		panic("failed to walk directory: " + err.Error())
 	}
 	return features
+}
+
+func green(s string) string {
+	return fmt.Sprintf("\033[32m%s\033[0m", s)
+}
+
+func red(s string) string {
+	return fmt.Sprintf("\033[31m%s\033[0m", s)
+}
+
+func cyan(s string) string {
+	return fmt.Sprintf("\033[36m%s\033[0m", s)
+}
+
+func yellow(s string) string {
+	return fmt.Sprintf("\033[33m%s\033[0m", s)
 }
