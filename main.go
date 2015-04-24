@@ -16,9 +16,10 @@ import (
 )
 
 type testRunner struct {
-	wg sync.WaitGroup
-	w  io.Writer
-	r  io.Reader
+	wg        sync.WaitGroup
+	w         io.Writer
+	r         io.Reader
+	semaphore chan int
 
 	sync.Mutex
 	errors          []error
@@ -30,9 +31,10 @@ type testRunner struct {
 }
 
 func NewTestRunner() *testRunner {
-	var e []error
 	reader, writer := io.Pipe()
 	var wg sync.WaitGroup
+	var e []error
+	var sem = make(chan int, 2)
 	return &testRunner{
 		wg:              wg,
 		w:               writer,
@@ -43,34 +45,25 @@ func NewTestRunner() *testRunner {
 		steps:           0,
 		stepsPassed:     0,
 		errors:          e,
+		semaphore:       sem,
 	}
+}
+
+func (t *testRunner) run() {
+	features := features()
+	for _, feature := range features {
+		t.wg.Add(1)
+		go t.executeTest(feature)
+	}
+	t.wg.Wait()
 }
 
 func main() {
 	t := NewTestRunner()
 	start := time.Now()
 
-	features := features()
-	pos := 0
-	for n := len(features); n > 0; {
-		size := 2
-		if n < size {
-			size = n
-		}
-		n -= size
-		chunk := features[pos : size+pos]
-		pos += size
-		for _, feature := range chunk {
-			t.wg.Add(1)
-			go t.executeTest(feature)
-		}
-		t.wg.Wait()
-	}
-	//for _, test := range features {
-	//t.wg.Add(1)
-	//go t.executeTest(test)
-	//}
-	//t.wg.Wait()
+	t.run()
+
 	fmt.Println()
 	for _, e := range t.errors {
 		fmt.Println(e)
@@ -81,6 +74,7 @@ func main() {
 }
 
 func (t *testRunner) executeTest(test string) {
+	t.semaphore <- 1
 	behat := exec.Command("./bin/behat", "-f", "progress", test)
 	stdout, err := behat.StdoutPipe()
 	if err != nil {
@@ -95,6 +89,7 @@ func (t *testRunner) executeTest(test string) {
 	if err != nil {
 		t.errors = append(t.errors, fmt.Errorf("TODO: handle std err output from behat: %s", err))
 	}
+	<-t.semaphore
 	t.wg.Done()
 }
 
