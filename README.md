@@ -1,8 +1,8 @@
-# beflash - Concurrent Behat feature runner
+# beflash - Parallel Behat feature runner
 
-Runs **Behat** features files concurrently. Note: this requires your test suite to be compatible with concurrent
+Runs **Behat** features files in parallel. Note: this requires your test suite to be compatible with parallel
 runner. For example in our case, we isolate scenarios within a database transaction and this allows us to run
-tests concurrently. When scenario ends - transaction is rolled back and the state is fresh again.
+tests in parallel. When scenario ends - transaction is rolled back and the state is fresh again.
 
 ## The success story
 
