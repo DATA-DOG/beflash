@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,36 +32,16 @@ type testRunner struct {
 	stepsPassed     int
 }
 
-func NewTestRunner() *testRunner {
-	reader, writer := io.Pipe()
-	var wg sync.WaitGroup
-	var e []error
-	var sem = make(chan int, 2)
-	return &testRunner{
-		wg:              wg,
-		w:               writer,
-		r:               reader,
-		stepsInLine:     0,
-		scenarios:       0,
-		scenariosPassed: 0,
-		steps:           0,
-		stepsPassed:     0,
-		errors:          e,
-		semaphore:       sem,
-	}
-}
+var flagConcurrencyLevel int
 
-func (t *testRunner) run() {
-	features := features()
-	for _, feature := range features {
-		t.wg.Add(1)
-		go t.executeTest(feature)
-	}
-	t.wg.Wait()
+func init() {
+	flag.IntVar(&flagConcurrencyLevel, "c", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
+	flag.IntVar(&flagConcurrencyLevel, "concurrency", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
 }
 
 func main() {
-	t := NewTestRunner()
+	flag.Parse()
+	t := NewTestRunner(flagConcurrencyLevel)
 	start := time.Now()
 
 	t.run()
@@ -71,6 +53,31 @@ func main() {
 	fmt.Printf("%d scenarios (\033[32m%d passed\033[0m)\n", t.scenarios, t.scenariosPassed)
 	fmt.Printf("%d steps (\033[32m%d passed\033[0m)\n", t.steps, t.stepsPassed)
 	fmt.Printf("Tests ran in: %s\n", time.Since(start))
+}
+
+func NewTestRunner(concurrencyLevel int) *testRunner {
+	reader, writer := io.Pipe()
+	return &testRunner{
+		wg:              sync.WaitGroup{},
+		w:               writer,
+		r:               reader,
+		stepsInLine:     0,
+		scenarios:       0,
+		scenariosPassed: 0,
+		steps:           0,
+		stepsPassed:     0,
+		errors:          make([]error, 0),
+		semaphore:       make(chan int, concurrencyLevel),
+	}
+}
+
+func (t *testRunner) run() {
+	features := features()
+	for _, feature := range features {
+		t.wg.Add(1)
+		go t.executeTest(feature)
+	}
+	t.wg.Wait()
 }
 
 func (t *testRunner) executeTest(test string) {
