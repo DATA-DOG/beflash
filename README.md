@@ -46,4 +46,5 @@ It is still work in progress - use it at your own discretion!
 
 - show failures the same way as default behat runner does
 - create a demo project to demonstrate the behavior
+- bug: when beflash fails to open one of the feature files, it just skips it for whole suite. (Unknown error while proccessing output: read |0: bad file descriptor)
 
