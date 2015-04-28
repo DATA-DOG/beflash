@@ -19,8 +19,6 @@ import (
 
 type testRunner struct {
 	wg        sync.WaitGroup
-	w         io.Writer
-	r         io.Reader
 	semaphore chan int
 
 	sync.Mutex
@@ -58,11 +56,8 @@ func main() {
 }
 
 func NewTestRunner(concurrencyLevel int) *testRunner {
-	reader, writer := io.Pipe()
 	return &testRunner{
 		wg:          sync.WaitGroup{},
-		w:           writer,
-		r:           reader,
 		stepsInLine: 0,
 		errors:      make([]error, 0),
 		semaphore:   make(chan int, concurrencyLevel),
