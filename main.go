@@ -24,12 +24,21 @@ type testRunner struct {
 	semaphore chan int
 
 	sync.Mutex
-	errors          []error
-	stepsInLine     int
-	scenarios       int
-	scenariosPassed int
-	steps           int
-	stepsPassed     int
+	errors      []error
+	stepsInLine int
+	summaryInfo *summary
+}
+
+type summary struct {
+	sync.Mutex
+	scenarios        int
+	scenariosPassed  int
+	scenariosFailed  int
+	scenariosSkipped int
+	steps            int
+	stepsPassed      int
+	stepsFailed      int
+	stepsSkipped     int
 }
 
 var flagConcurrencyLevel int
@@ -43,33 +52,39 @@ func main() {
 	flag.Parse()
 	t := NewTestRunner(flagConcurrencyLevel)
 	start := time.Now()
-
 	t.run()
-
-	fmt.Println()
-	for _, e := range t.errors {
-		fmt.Println(e)
-	}
-
-	fmt.Printf("%d scenarios (%s)\n", t.scenarios, green(fmt.Sprintf("%d passed", t.scenariosPassed)))
-	fmt.Printf("%d steps (%s)\n", t.steps, green(fmt.Sprintf("%d passed", t.stepsPassed)))
+	t.summary()
 	fmt.Printf("Tests ran in: %s\n", time.Since(start))
 }
 
 func NewTestRunner(concurrencyLevel int) *testRunner {
 	reader, writer := io.Pipe()
 	return &testRunner{
-		wg:              sync.WaitGroup{},
-		w:               writer,
-		r:               reader,
-		stepsInLine:     0,
-		scenarios:       0,
-		scenariosPassed: 0,
-		steps:           0,
-		stepsPassed:     0,
-		errors:          make([]error, 0),
-		semaphore:       make(chan int, concurrencyLevel),
+		wg:          sync.WaitGroup{},
+		w:           writer,
+		r:           reader,
+		stepsInLine: 0,
+		errors:      make([]error, 0),
+		semaphore:   make(chan int, concurrencyLevel),
+		summaryInfo: &summary{
+			scenarios:        0,
+			scenariosPassed:  0,
+			scenariosFailed:  0,
+			scenariosSkipped: 0,
+			steps:            0,
+			stepsPassed:      0,
+			stepsFailed:      0,
+			stepsSkipped:     0,
+		},
 	}
+}
+
+func (t *testRunner) summary() {
+	fmt.Println()
+	for _, e := range t.errors {
+		fmt.Println(e)
+	}
+	fmt.Println(t.summaryInfo)
 }
 
 func (t *testRunner) run() {
@@ -126,39 +141,16 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 					if err != nil {
 						break
 					}
-					// TODO:
-					// parse scenarios and steps info and store somewhere.
-					// parse failed, skipped and undefined scenarios/steps
-					if n, matched := parseSuiteInfo("scenario", line); matched {
-						t.Lock()
-						t.scenarios += n
-						t.Unlock()
-						if n, matched = parseSuiteInfo("passed", line); matched {
-							t.Lock()
-							t.scenariosPassed += n
-							t.Unlock()
-						}
-					}
-
-					if n, matched := parseSuiteInfo("step", line); matched {
-						t.Lock()
-						t.steps += n
-						t.Unlock()
-						if n, matched = parseSuiteInfo("passed", line); matched {
-							t.Lock()
-							t.stepsPassed += n
-							t.Unlock()
-						}
-					}
+					t.summaryInfo.parseTestSummary(line)
 				}
 			}
 			break
 		case c == '.' || c == '-' || c == 'F' || c == 'U':
+			t.Lock()
 			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
 				fmt.Printf(" %d\n", t.stepsInLine)
 			}
 			fmt.Print(colorMap[c](string(c)))
-			t.Lock()
 			t.stepsInLine += 1
 			t.Unlock()
 			break
@@ -171,6 +163,62 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 			break
 		}
 	}
+}
+
+// TODO: add undefined steps
+func (s *summary) parseTestSummary(line []byte) {
+	if n, matched := parseSuiteInfo("scenario", line); matched {
+		s.Lock()
+		s.scenarios += n
+		s.Unlock()
+		if n, matched = parseSuiteInfo("passed", line); matched {
+			s.Lock()
+			s.scenariosPassed += n
+			s.Unlock()
+		}
+		if n, matched = parseSuiteInfo("failed", line); matched {
+			s.Lock()
+			s.scenariosFailed += n
+			s.Unlock()
+		}
+		if n, matched = parseSuiteInfo("skipped", line); matched {
+			s.Lock()
+			s.scenariosSkipped += n
+			s.Unlock()
+		}
+	}
+
+	if n, matched := parseSuiteInfo("step", line); matched {
+		s.Lock()
+		s.steps += n
+		s.Unlock()
+		if n, matched = parseSuiteInfo("passed", line); matched {
+			s.Lock()
+			s.stepsPassed += n
+			s.Unlock()
+		}
+		if n, matched = parseSuiteInfo("failed", line); matched {
+			s.Lock()
+			s.stepsFailed += n
+			s.Unlock()
+		}
+		if n, matched = parseSuiteInfo("skipped", line); matched {
+			s.Lock()
+			s.stepsSkipped += n
+			s.Unlock()
+		}
+	}
+}
+
+func parseSuiteInfo(s string, buf []byte) (n int, matched bool) {
+	re := regexp.MustCompile("([0-9]+) " + s)
+	match := re.FindString(string(buf))
+	if match != "" {
+		splitted := strings.Split(match, " ")
+		n, _ := strconv.Atoi(splitted[0])
+		return n, true
+	}
+	return 0, false
 }
 
 func features() []string {
@@ -187,17 +235,6 @@ func features() []string {
 	return features
 }
 
-func parseSuiteInfo(s string, buf []byte) (n int, matched bool) {
-	re := regexp.MustCompile("([0-9]+) " + s)
-	match := re.FindString(string(buf))
-	if match != "" {
-		splitted := strings.Split(match, " ")
-		n, _ := strconv.Atoi(splitted[0])
-		return n, true
-	}
-	return 0, false
-}
-
 func green(s string) string {
 	return fmt.Sprintf("\033[32m%s\033[0m", s)
 }
@@ -212,4 +249,24 @@ func cyan(s string) string {
 
 func yellow(s string) string {
 	return fmt.Sprintf("\033[33m%s\033[0m", s)
+}
+
+func (s *summary) String() string {
+	res := fmt.Sprintf("%d scenarios (%s", s.scenarios, green(fmt.Sprintf("%d passed", s.scenariosPassed)))
+	if s.scenariosFailed > 0 {
+		res += fmt.Sprintf(", %s", red(fmt.Sprintf("%d failed", s.scenariosFailed)))
+	}
+	if s.scenariosSkipped > 0 {
+		res += fmt.Sprintf(", %s", cyan(fmt.Sprintf("%d skipped", s.scenariosSkipped)))
+	}
+	res += fmt.Sprintf(")\n")
+	res += fmt.Sprintf("%d steps (%s", s.steps, green(fmt.Sprintf("%d passed", s.stepsPassed)))
+	if s.stepsFailed > 0 {
+		res += fmt.Sprintf(", %s", red(fmt.Sprintf("%d failed", s.stepsFailed)))
+	}
+	if s.stepsSkipped > 0 {
+		res += fmt.Sprintf(", %s", cyan(fmt.Sprintf("%d skipped", s.stepsSkipped)))
+	}
+	res += fmt.Sprintf(")\n")
+	return res
 }
