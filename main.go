@@ -18,13 +18,14 @@ import (
 )
 
 type testRunner struct {
-	wg        sync.WaitGroup
-	semaphore chan int
+	wg          sync.WaitGroup
+	semaphore   chan int
+	summaryInfo *summary
+	errors      []error
+	cfg         *config
 
 	sync.Mutex
-	errors      []error
 	stepsInLine int
-	summaryInfo *summary
 }
 
 type summary struct {
@@ -39,28 +40,46 @@ type summary struct {
 	stepsSkipped     int
 }
 
-var flagConcurrencyLevel int
+type config struct {
+	concurrencyLevel int
+	binPath          string
+	featuresPath     string
+}
+
+var (
+	flagConcurrencyLevel int
+	flagBinPath          string
+	flagFeaturesPath     string
+)
 
 func init() {
 	flag.IntVar(&flagConcurrencyLevel, "c", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
 	flag.IntVar(&flagConcurrencyLevel, "concurrency", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
+	flag.StringVar(&flagBinPath, "bin", "bin/behat", "Default path to behat executable")
+	flag.StringVar(&flagFeaturesPath, "features", "features/", "Default path to behat features")
 }
 
 func main() {
 	flag.Parse()
-	t := NewTestRunner(flagConcurrencyLevel)
+	cfg := &config{
+		concurrencyLevel: flagConcurrencyLevel,
+		binPath:          flagBinPath,
+		featuresPath:     flagFeaturesPath,
+	}
+	t := NewTestRunner(cfg)
 	start := time.Now()
 	t.run()
 	t.summary()
 	fmt.Printf("Tests ran in: %s\n", time.Since(start))
 }
 
-func NewTestRunner(concurrencyLevel int) *testRunner {
+func NewTestRunner(cfg *config) *testRunner {
 	return &testRunner{
 		wg:          sync.WaitGroup{},
 		stepsInLine: 0,
 		errors:      make([]error, 0),
-		semaphore:   make(chan int, concurrencyLevel),
+		semaphore:   make(chan int, cfg.concurrencyLevel),
+		cfg:         cfg,
 		summaryInfo: &summary{
 			scenarios:        0,
 			scenariosPassed:  0,
@@ -83,7 +102,7 @@ func (t *testRunner) summary() {
 }
 
 func (t *testRunner) run() {
-	features := features()
+	features := t.features()
 	for _, feature := range features {
 		t.wg.Add(1)
 		go t.executeTest(feature)
@@ -93,7 +112,7 @@ func (t *testRunner) run() {
 
 func (t *testRunner) executeTest(test string) {
 	t.semaphore <- 1
-	behat := exec.Command("./bin/behat", "-f", "progress", test)
+	behat := exec.Command(t.cfg.binPath, "-f", "progress", test)
 	stdout, err := behat.StdoutPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -216,9 +235,9 @@ func parseSuiteInfo(s string, buf []byte) (n int, matched bool) {
 	return 0, false
 }
 
-func features() []string {
+func (t *testRunner) features() []string {
 	var features []string
-	err := filepath.Walk("features", func(path string, file os.FileInfo, err error) error {
+	err := filepath.Walk(t.cfg.featuresPath, func(path string, file os.FileInfo, err error) error {
 		if err == nil && !file.IsDir() {
 			features = append(features, path)
 		}

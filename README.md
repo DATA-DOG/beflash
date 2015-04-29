@@ -26,7 +26,10 @@ To install, simply run:
 It should be installed in your **$GOPATH/bin** and since it is probably in your **$PATH**,
 run it in your project directory by calling `beflash`
 
-It expects to find behat executable at `./bin/behat` and scans `features/` directory for scenarios to run at the moment.
+## Use
+
+Default places to look for behat executable and features directory are `bin/behat` and `features/` respectively.
+Use -bin and -features flags to specify custom parameters.
 
 ## Concurrency level
 
