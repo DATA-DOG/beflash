@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,7 +21,6 @@ type testRunner struct {
 	semaphore   chan int
 	summaryInfo *summary
 	errors      []error
-	cfg         *config
 
 	sync.Mutex
 	stepsInLine int
@@ -40,46 +38,26 @@ type summary struct {
 	stepsSkipped     int
 }
 
-type config struct {
-	concurrencyLevel int
-	binPath          string
-	featuresPath     string
-}
-
-var (
-	flagConcurrencyLevel int
-	flagBinPath          string
-	flagFeaturesPath     string
-)
-
-func init() {
-	flag.IntVar(&flagConcurrencyLevel, "c", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
-	flag.IntVar(&flagConcurrencyLevel, "concurrency", runtime.NumCPU(), "Concurrency level, defaults to number of CPUs")
-	flag.StringVar(&flagBinPath, "bin", "bin/behat", "Default path to behat executable")
-	flag.StringVar(&flagFeaturesPath, "features", "features/", "Default path to behat features")
-}
+var cfg config
 
 func main() {
 	flag.Parse()
-	cfg := &config{
-		concurrencyLevel: flagConcurrencyLevel,
-		binPath:          flagBinPath,
-		featuresPath:     flagFeaturesPath,
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
 	}
-	t := NewTestRunner(cfg)
+	t := NewTestRunner()
 	start := time.Now()
 	t.run()
 	t.summary()
 	fmt.Printf("Tests ran in: %s\n", time.Since(start))
 }
 
-func NewTestRunner(cfg *config) *testRunner {
+func NewTestRunner() *testRunner {
 	return &testRunner{
 		wg:          sync.WaitGroup{},
 		stepsInLine: 0,
 		errors:      make([]error, 0),
 		semaphore:   make(chan int, cfg.concurrencyLevel),
-		cfg:         cfg,
 		summaryInfo: &summary{
 			scenarios:        0,
 			scenariosPassed:  0,
@@ -112,7 +90,7 @@ func (t *testRunner) run() {
 
 func (t *testRunner) executeTest(test string) {
 	t.semaphore <- 1
-	behat := exec.Command(t.cfg.binPath, "-f", "progress", test)
+	behat := exec.Command(cfg.binPath, "-f", "progress", test)
 	stdout, err := behat.StdoutPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -237,7 +215,7 @@ func parseSuiteInfo(s string, buf []byte) (n int, matched bool) {
 
 func (t *testRunner) features() []string {
 	var features []string
-	err := filepath.Walk(t.cfg.featuresPath, func(path string, file os.FileInfo, err error) error {
+	err := filepath.Walk(cfg.featuresPath, func(path string, file os.FileInfo, err error) error {
 		if err == nil && !file.IsDir() {
 			features = append(features, path)
 		}
