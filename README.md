@@ -29,7 +29,7 @@ run it in your project directory by calling `beflash`
 ## Use
 
 Default places to look for behat executable and features directory are `bin/behat` and `features/` respectively.
-Use -bin and -features flags to specify custom parameters.
+Use `-bin` and `-features` flags to specify custom parameters.
 
 ## Concurrency level
 
@@ -53,7 +53,3 @@ It is still work in progress - use it at your own discretion!
 ## Nice to have
 
 - Take console width into consideration when formatting steps output
-
-## Bugs
-
-- when beflash fails to open one of the feature files, it just skips it for whole suite. (Unknown error while proccessing output: read |0: bad file descriptor)

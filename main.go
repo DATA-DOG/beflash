@@ -46,10 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 	t := NewTestRunner()
-	start := time.Now()
-	t.run()
-	t.summary()
-	fmt.Printf("Tests ran in: %s\n", time.Since(start))
+	t.Run()
 }
 
 func NewTestRunner() *testRunner {
@@ -71,21 +68,24 @@ func NewTestRunner() *testRunner {
 	}
 }
 
-func (t *testRunner) summary() {
-	fmt.Println()
-	for _, e := range t.errors {
-		fmt.Println(e)
-	}
-	fmt.Println(t.summaryInfo)
-}
-
-func (t *testRunner) run() {
+func (t *testRunner) Run() {
+	start := time.Now()
 	features := t.features()
 	for _, feature := range features {
 		t.wg.Add(1)
 		go t.executeTest(feature)
 	}
 	t.wg.Wait()
+	t.summary()
+	fmt.Printf("Tests ran in: %s\n", time.Since(start))
+}
+
+func (t *testRunner) summary() {
+	fmt.Println()
+	for _, e := range t.errors {
+		fmt.Println(e)
+	}
+	fmt.Println(t.summaryInfo)
 }
 
 func (t *testRunner) executeTest(test string) {
@@ -95,11 +95,11 @@ func (t *testRunner) executeTest(test string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go t.proccessOutput(stdout)
 	err = behat.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
+	t.proccessOutput(stdout)
 	err = behat.Wait()
 	if err != nil {
 		t.errors = append(t.errors, fmt.Errorf("TODO: handle std err output from behat: %s", err))
@@ -118,8 +118,8 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 	reader := bufio.NewReader(out)
 	for {
 		c, err := reader.ReadByte()
-		switch {
-		case c == '\n':
+		switch c {
+		case '\n':
 			// if we encounted two new lines in a row - steps have finished
 			// and we try to parse information about runned scenarios and steps
 			nextByte, err := reader.Peek(1)
@@ -137,9 +137,9 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 				}
 			}
 			break
-		case c == '.' || c == '-' || c == 'F' || c == 'U':
+		case '.', '-', 'F', 'U':
 			t.Lock()
-			if t.stepsInLine > 0 && t.stepsInLine%70 == 0 {
+			if t.stepsInLine%70 == 0 && t.stepsInLine > 0 {
 				fmt.Printf(" %d\n", t.stepsInLine)
 			}
 			fmt.Print(colorMap[c](string(c)))
