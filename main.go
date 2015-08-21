@@ -21,6 +21,7 @@ type testRunner struct {
 	semaphore   chan int
 	summaryInfo *summary
 	errors      []error
+	extras      []string // failed, undefined step information
 
 	sync.Mutex
 	stepsInLine int
@@ -81,10 +82,13 @@ func (t *testRunner) Run() {
 }
 
 func (t *testRunner) summary() {
-	fmt.Println()
-	for _, e := range t.errors {
-		fmt.Println(e)
+	fmt.Println("\n")
+	for _, extra := range t.extras {
+		fmt.Println(extra)
 	}
+	// for _, e := range t.errors {
+	// 	fmt.Println(e)
+	// }
 	fmt.Println(t.summaryInfo)
 }
 
@@ -128,6 +132,7 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 			}
 			if nextByte[0] == '\n' {
 				_, err = reader.ReadByte()
+				t.parseExtras(reader)
 				for {
 					line, err := reader.ReadBytes('\n')
 					if err != nil {
@@ -154,6 +159,41 @@ func (t *testRunner) proccessOutput(out io.Reader) {
 			log.Printf("Unknown error while proccessing output: %s", err)
 			break
 		}
+	}
+}
+
+func (t *testRunner) parseExtras(reader *bufio.Reader) {
+	next, err := reader.Peek(1)
+	if err != nil {
+		return
+	}
+	if next[0] != '-' {
+		return
+	}
+
+	var lines []string
+	for {
+		next, err = reader.Peek(1)
+		if err != nil {
+			break
+		}
+		// check if extras
+		if next[0] != ' ' && next[0] != '-' {
+			break
+		}
+
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		lines = append(lines, red(string(line)))
+		_, _ = reader.ReadByte()
+	}
+
+	if len(lines) > 0 {
+		t.Lock()
+		t.extras = append(t.extras, strings.Join(lines, "\n"))
+		t.Unlock()
 	}
 }
 
